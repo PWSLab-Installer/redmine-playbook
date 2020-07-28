@@ -1,0 +1,83 @@
+- hosts: localhost
+  connection: local
+
+  vars:
+    redmine_version: 4.1.1
+  tasks:
+      
+    -   name: Check the version of OS
+        command: hostnamectl
+        register: os_check
+        ignore_errors: yes 
+
+    -   name: Fetch Redmine Role
+        git:
+            repo: https://ro:gPcNVUpGh6ASbqfQCCv5@pwslab.org/ansible/redmine-playbook.git
+            dest: /root/.ansible/roles/pwslab.redmine
+            version: master
+            force: yes
+
+    -   name: Install Role MySQL
+        local_action: command ansible-galaxy install -f geerlingguy.mysql
+
+    -   name: Install Role Ruby
+        local_action: command ansible-galaxy install -f geerlingguy.ruby
+
+    -   name: Install Role NGINX
+        local_action: command ansible-galaxy install -f geerlingguy.nginx 
+
+    -   name: Check if Nginx is already installed
+        stat: path=/usr/sbin/nginx
+        register: nginx_exists
+
+    -   name: Check if MYSQL is already installed
+        stat: path=/usr/bin/mysql
+        register: mysql_exists
+
+    -   name: Applying role MYSQL
+        command: mv ~/.ansible/roles/geerlingguy.mysql ~/.ansible/roles/pwslab.mysql
+        when: not mysql_exists.stat.exists
+        ignore_errors: yes
+
+    -   name: Applying role Nginx
+        command: mv ~/.ansible/roles/geerlingguy.nginx ~/.ansible/roles/pwslab.nginx
+        when: not nginx_exists.stat.exists
+        ignore_errors: yes
+
+    -   name: Applying role Ruby
+        command: mv ~/.ansible/roles/geerlingguy.ruby ~/.ansible/roles/pwslab.ruby
+        ignore_errors: yes
+
+    -   name: Installing MYSQL
+        include_role:
+            name: pwslab.mysql
+        when: not mysql_exists.stat.exists
+
+    -   name: Installing Ruby
+        include_role:
+            name: pwslab.ruby
+
+    -   name: Installing NGINX
+        include_role:
+          name: pwslab.nginx
+        when: 
+          - not nginx_exists.stat.exists
+          - os_check.stdout | regex_search("CentOS Linux 8")
+        vars:
+          nginx_vhosts:
+            - listen: "80 default_server"
+              server_name: "localhost"
+              root: "/usr/share/nginx/html"
+              index: "index.php index.html index.htm"
+              # template: "{{ playbook_dir }}/templates/default.conf.j2"
+
+    -   name: Installing NGINX
+        include_role:
+          name: pwslab.nginx
+        when: 
+          - not nginx_exists.stat.exists
+          - not os_check.stdout | regex_search("CentOS Linux 8")
+
+    -   name: Installing Redmine
+        include_role:
+            name: pwslab.redmine

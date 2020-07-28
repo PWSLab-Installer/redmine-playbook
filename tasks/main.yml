@@ -1,0 +1,117 @@
+---
+
+    -   name: Create Redmine DB
+        command: mysql -uroot -p'root' -e "CREATE DATABASE redmine CHARACTER SET utf8mb4;"
+
+    
+    -   name: Execute Schema Process
+        command: mysql -uroot -p'root' -e "GRANT ALL ON redmine.* TO 'redmine'@'localhost' IDENTIFIED BY 'redmine';"
+
+    -   name: Install pre-packages - Ubuntu
+        apt: 
+            name: "{{ item }}"
+            update_cache: yes
+        loop:
+            - dirmngr
+            - gnupg
+            - apt-transport-https
+            - ca-certificates
+        when: 
+            - os_check.stdout | regex_search("Ubuntu")
+
+    -   name: Add Apt Key - Ubuntu
+        command: apt-key adv --recv-keys --keyserver hkp://keyserver.ubuntu.com:80 561F9B9CAC40B2F7
+        when: 
+            - os_check.stdout | regex_search("Ubuntu")
+        
+    -   name: Add repos - Ubuntu
+        command: add-apt-repository 'deb https://oss-binaries.phusionpassenger.com/apt/passenger bionic main'
+        when: 
+            - os_check.stdout | regex_search("Ubuntu")
+
+    -   name: Install libnginx-mod-http-passenger - Ubuntu
+        apt: 
+            name: libnginx-mod-http-passenger
+            update_cache: yes
+        when: 
+            - os_check.stdout | regex_search("Ubuntu")
+
+    -   name: Install Dependencies - Ubuntu
+        apt: 
+            name: "{{ item }}"
+            update_cache: yes
+        loop:
+            - build-essential 
+            - libmysqlclient-dev 
+            - imagemagick 
+            - libmagickwand-dev
+        when: 
+            - os_check.stdout | regex_search("Ubuntu")
+
+    -   name: Download Redmine 
+        get_url:
+            url: http://www.redmine.org/releases/redmine-{{ redmine_version }}.tar.gz 
+            dest: /tmp/redmine.tar.gz
+
+    -   name: Extract Redmine
+        unarchive:
+            src: /tmp/redmine.tar.gz
+            dest: /tmp
+
+    -   name: Process Redmine
+        command: mv /tmp/redmine-{{ redmine_version }} /opt/redmine
+
+    -   name: Set the database.yml
+        become: true
+        template:
+            src: "database.yml.j2"
+            dest: "/opt/redmine/config/database.yml"
+
+    -   name: Build redmine I
+        command: gem install bundler --no-rdoc --no-ri 
+        become: yes
+        args:
+            chdir: /opt/redmine/
+
+    -   name: Build redmine II
+        command: bundle install --without development test postgresql sqlite
+        become: yes
+        args:
+            chdir: /opt/redmine/
+
+    -   name: Generate Redmine Key
+        command: bundle exec rake generate_secret_token
+        become: yes
+        args:
+            chdir: /opt/redmine/
+
+    -   name: Enable Prod
+        command: RAILS_ENV=production bundle exec rake db:migrate
+        become: yes
+        args:
+            chdir: /opt/redmine/
+
+    -   name: Granting Permissions
+        file:
+            path: /opt/redmine/
+            recurse: yes
+            owner: www-data
+            # mode: '0777'
+        when:
+            - os_check.stdout | regex_search("Ubuntu")
+
+    -   name: Set the Nginx config
+        become: true
+        template:
+            src: "nginx.config.j2"
+            dest: "/etc/nginx/sites-available/redmine.conf"
+        when:
+            - os_check.stdout | regex_search("Ubuntu")
+
+    -   name: Create symbolic link 
+        file:
+            src: "/etc/nginx/sites-available/redmine.conf"
+            dest: "/etc/nginx/sites-enabled/redmine.conf"
+            state: link
+        when:
+                - os_check.stdout | regex_search("Ubuntu")
