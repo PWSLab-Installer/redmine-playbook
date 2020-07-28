@@ -2,10 +2,12 @@
 
     -   name: Create Redmine DB
         command: mysql -uroot -p'root' -e "CREATE DATABASE redmine CHARACTER SET utf8mb4;"
+        ignore_errors: yes
 
     
     -   name: Execute Schema Process
-        command: mysql -uroot -p'root' -e "GRANT ALL ON redmine.* TO 'redmine'@'localhost' IDENTIFIED BY 'redmine';"
+        ignore_errors: yes
+        command: mysql -uroot -p'root' -e "GRANT ALL ON redmine.* TO 'redmine'@'localhost' IDENTIFIED BY redmine;"
 
     -   name: Install pre-packages - Ubuntu
         apt: 
@@ -59,7 +61,7 @@
             dest: /tmp
 
     -   name: Process Redmine
-        command: mv /tmp/redmine-{{ redmine_version }} /opt/redmine
+        command: mv /tmp/redmine-4.0.0 /opt/redmine
 
     -   name: Set the database.yml
         become: true
